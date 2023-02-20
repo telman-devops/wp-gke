@@ -1,0 +1,59 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+        - name: cloudsql-proxy
+          image: gcr.io/cloudsql-docker/gce-proxy:1.28.0
+          command:
+          - "/cloud_sql_proxy"
+          - "-instances=itechart-377110:europe-west3:wp-database=tcp:3306"
+          - "-credential_file=/secrets/itechart-377110-1a85d9b1802e.json"
+          securityContext:
+            runAsUser: 2  # non-root user
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: cloudsql-credentials
+              mountPath: /secrets
+              readOnly: true
+        - name: wordpress
+          image: wordpress:5.8.3-php7.4-apache
+          ports:
+          - containerPort: 80
+            name: wordpress
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: 127.0.0.1:3306
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: WORDPRESS_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: username
+            - name: WORDPRESS_DB_NAME
+              value: wordpress
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: wordpress-volume
+        - name: cloudsql-credentials
+          secret:
+            secretName: sa-credentials
